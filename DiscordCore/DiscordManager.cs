@@ -1,14 +1,12 @@
-﻿using BeatSaberMarkupLanguage.Settings;
+using BeatSaberMarkupLanguage.Settings;
 using BeatSaberMarkupLanguage.Util;
-using Discord;
 using DiscordCore.UI;
 using IPA;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
+using Discord;
 
 namespace DiscordCore
 {
@@ -21,8 +19,6 @@ namespace DiscordCore
         public static DiscordManager instance = null;
 
         public static string deactivationReason;
-        private static string lastCheckDeactivationReason;
-        private static float lastCheckTime;
 
         public void Awake()
         {
@@ -88,65 +84,51 @@ namespace DiscordCore
 
         public void Update()
         {
-            if (!active && deactivationReason == DiscordClient.DisabledReason) return;
+            if (!DiscordClient.Enabled) return;
 
-            if (!active && Time.time - lastCheckTime >= 10f)
+            // Always pump callbacks so status changes arrive on the main thread.
+            DiscordClient.RunCallbacks();
+
+            if (!DiscordClient.IsConnected)
             {
-                lastCheckTime = Time.time;
-                try
-                {
-                    DiscordClient.Enable();
-                    Plugin.log.Debug($"Discord reactivated.");
-                    active = true;
-                    deactivationReason = string.Empty;
-                    lastCheckDeactivationReason = string.Empty;
-                }
-                catch (ResultException e)
-                {
-                    ProcessResultException(e, "Error starting DiscordClient: ");
-                }
-                catch (Exception e)
-                {
-                    Plugin.log.Debug(e);
-                    active = false;
-                    SetDeactivationReasonFromException(e);
-                    lastCheckDeactivationReason = deactivationReason;
-                }
+                // App ID not yet set — runs on the first Update() tick after all BSIPA mods have
+                // completed their Init()/OnEnable() and registered their instances.
+                // Pick the highest-priority instance app ID for RPC rich presence.
+                ConnectWithBestAppId();
+                return;
             }
-            if (active && Time.time - lastUpdateTime >= 5f)
+
+            // Only update activity once an app ID has been configured.
+            if (!active || !DiscordClient.IsReady) return;
+
+            if (Time.time - lastUpdateTime >= 5f)
             {
                 lastUpdateTime = Time.time;
-                lastCheckDeactivationReason = null;
-                try
+                UpdateCurrentActivity();
+            }
+        }
+
+        private void ConnectWithBestAppId()
+        {
+            long bestAppId = -1;
+            int bestPriority = int.MaxValue;
+            foreach (var inst in _activeInstances)
+            {
+                if (inst.activityEnabled && inst.Priority < bestPriority)
                 {
-                    UpdateCurrentActivity();
-                    DiscordClient.RunCallbacks();
-                }
-                catch (Discord.ResultException e)
-                {
-                    ProcessResultException(e, "Error in RunCallbacks: ");
+                    bestPriority = inst.Priority;
+                    bestAppId = inst.settings.appId;
                 }
             }
+            DiscordClient.ChangeAppID(bestAppId);
         }
 
         public void OnEnable()
         {
             active = true;
-            try
-            {
-                DiscordClient.Enable();
-            }
-            catch (ResultException e)
-            {
-                ProcessResultException(e, "Error starting DiscordClient: ");
-            }
-            catch (Exception e)
-            {
-                Plugin.log.Debug(e);
-                active = false;
-                SetDeactivationReasonFromException(e);
-                lastCheckDeactivationReason = deactivationReason;
-            }
+            // Enable() no longer throws — connection errors arrive via the status callback
+            // (OnNativeStatusChanged in DiscordClient) which sets active and deactivationReason.
+            DiscordClient.Enable();
         }
 
         public void OnDisable()
@@ -175,45 +157,16 @@ namespace DiscordCore
 
             if (activityFound)
             {
-                
                 DiscordClient.ChangeAppID(appId);
-                DiscordClient.GetActivityManager().UpdateActivity(topPriorityActivity, (result) => {
-                    if (result != Result.Ok)
-                    {
-                        Plugin.log.Debug($"Found activity (ApplicationId={topPriorityActivity.ApplicationId}, Type={topPriorityActivity.Type}), update result: {result}");
-                    }
+                DiscordClient.UpdateRichPresence(topPriorityActivity, (ok, err) => {
+                    if (!ok)
+                        Plugin.log.Debug($"Activity update failed: {err}");
                 });
             }
             else
             {
                 DiscordClient.ChangeAppID(-1);
-                DiscordClient.GetActivityManager().ClearActivity((result) => {
-                    if (result != Result.Ok)
-                    {
-                        Plugin.log.Debug($"Count not find activity to update, activity clear result: {result}");
-                    }
-                });
-            }
-        }
-
-        private void ProcessResultException(ResultException e, string messagePrefix)
-        {
-
-            active = false;
-            SetDeactivationReasonFromException(e);
-            if (lastCheckDeactivationReason == deactivationReason) return; // Already messaged this.
-            lastCheckDeactivationReason = deactivationReason;
-            if (e.Result != Result.NotRunning && e.Result != Result.InternalError)
-            {
-                Plugin.log.Error(messagePrefix + e.Message);
-                Plugin.log.Debug(e);
-            }
-            else
-            {
-                Plugin.log.Info(messagePrefix + "Discord is not running.");
-#if DEBUG
-                Plugin.log.Debug(e);
-#endif
+                DiscordClient.ClearRichPresence();
             }
         }
 
@@ -225,7 +178,9 @@ namespace DiscordCore
 
             foreach (var instance in _activeInstances)
             {
-                if (instance.activityValid && instance.activityEnabled && instance.settings.handleInvites && instance.settings.appId == DiscordClient.CurrentAppID && (handlerInstance == null || instance.Priority < handlerInstance.Priority))
+                if (instance.activityValid && instance.activityEnabled && instance.settings.handleInvites
+                    && instance.settings.appId == DiscordClient.CurrentAppID
+                    && (handlerInstance == null || instance.Priority < handlerInstance.Priority))
                 {
                     handlerInstance = instance;
                 }

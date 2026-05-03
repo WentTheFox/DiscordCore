@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <OutputCopy Include="$(ProjectDir)..\Refs\Libs\Native\discord_game_sdk.dll" OutputPath="Libs\Native\discord_game_sdk.dll" />
-    <OutputCopy Include="$(ProjectDir)..\Refs\Plugins\DiscordGameSDK.manifest" OutputPath="Plugins\DiscordGameSDK.manifest" />
+    <OutputCopy Include="$(ProjectDir)..\Refs\Libs\Native\discord_partner_sdk.dll" OutputPath="Libs\Native\discord_partner_sdk.dll" />
+    <OutputCopy Include="$(ProjectDir)..\Refs\Plugins\DiscordSocialSDK.manifest" OutputPath="Plugins\DiscordSocialSDK.manifest" />
     <OutputCopy Include="$(OutDir)$(TargetFileName)" OutputPath="Plugins\$(TargetFileName)" />
     <OutputCopy Include="$(OutDir)$(TargetName).pdb" OutputPath="Plugins\$(TargetName).pdb" />
   </ItemGroup>
