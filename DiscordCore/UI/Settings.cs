@@ -24,48 +24,78 @@ namespace DiscordCore.UI
         [UIValue("allow-invites")]
         public bool allowInvites { get { return Config.Instance.AllowInvites; } set { Config.Instance.AllowInvites = value; } }
 
+#pragma warning disable CS0649 // assigned by BSML via reflection
+        [UIObject("discord-connect-btn")]
+        private GameObject _connectBtn;
+
+        [UIObject("discord-disconnect-btn")]
+        private GameObject _disconnectBtn;
+#pragma warning restore CS0649
+
         [UIComponent("mods-list")]
         public CustomCellListTableData modsList;
 
         [UIValue("mods")]
         public List<object> modObjectsList = new List<object>();
 
+        [UIAction("connect-discord")]
+        private void ConnectDiscord()
+        {
+            DiscordClient.Authorize((ok, err) =>
+            {
+                if (!ok) Plugin.log.Error($"Discord auth failed: {err}");
+                RefreshAuthButtons();
+            });
+        }
+
+        [UIAction("disconnect-discord")]
+        private void DisconnectDiscord()
+        {
+            DiscordClient.RevokeAuth(RefreshAuthButtons);
+        }
+
+        private void RefreshAuthButtons()
+        {
+            bool auth = DiscordClient.IsAuthenticated;
+            if (_connectBtn != null) _connectBtn.SetActive(!auth);
+            if (_disconnectBtn != null) _disconnectBtn.SetActive(auth);
+        }
+
         [UIAction("#post-parse")]
         public void UpdateModsList()
         {
-            if (modsList != null)
+            RefreshAuthButtons();
+            try
             {
-                try
+                var instances = DiscordManager.instance._activeInstances.OrderBy(y => y.Priority).ToList();
+
+                if (modObjectsList.Count != instances.Count)
                 {
-                    var instances = DiscordManager.instance._activeInstances.OrderBy(y => y.Priority);
+                    modObjectsList.Clear();
 
-                    if (modObjectsList.Count != DiscordManager.instance._activeInstances.Count)
+                    foreach (var instance in instances)
                     {
-                        modObjectsList.Clear();
+                        var listObject = new ModListObject(instance);
 
-                        foreach (var instance in instances)
-                        {
-                            var listObject = new ModListObject(instance);
+                        listObject.activeStateChanged += ListObject_activeStateChanged;
+                        listObject.increasePriorityPressed += ListObject_increasePriorityPressed;
+                        listObject.decreasePriorityPressed += ListObject_decreasePriorityPressed;
 
-                            listObject.activeStateChanged += ListObject_activeStateChanged;
-                            listObject.increasePriorityPressed += ListObject_increasePriorityPressed;
-                            listObject.decreasePriorityPressed += ListObject_decreasePriorityPressed;
-
-                            modObjectsList.Add(listObject);
-                        }
-
-                        modsList.TableView.ReloadData();
-                    }
-                    else
-                    {
-                        for (int i = 0; i < modObjectsList.Count; i++)
-                            (modObjectsList[i] as ModListObject).ReplaceModInstance(instances.ElementAt(i));
+                        modObjectsList.Add(listObject);
                     }
                 }
-                catch (Exception e)
+                else
                 {
-                    Plugin.log.Error($"Unable to update mods list in settings! Exception: {e}");
+                    for (int i = 0; i < modObjectsList.Count; i++)
+                        (modObjectsList[i] as ModListObject).ReplaceModInstance(instances[i]);
                 }
+
+                if (modsList != null)
+                    modsList.TableView.ReloadData();
+            }
+            catch (Exception e)
+            {
+                Plugin.log.Error($"Unable to update mods list in settings! Exception: {e}");
             }
         }
 

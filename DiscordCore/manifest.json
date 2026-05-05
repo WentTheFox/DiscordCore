@@ -5,7 +5,7 @@
     "gameVersion": "1.40.8",
     "id": "DiscordCore",
     "name": "DiscordCore",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "dependsOn": {
       "BSIPA": "^4.3.6",
       "DiscordSocialSDK": "^1.9.15332",

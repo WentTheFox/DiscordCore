@@ -44,6 +44,15 @@ namespace DiscordCore.Native
     [StructLayout(LayoutKind.Sequential)]
     internal struct Discord_ClientResult { internal IntPtr opaque; }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Discord_AuthorizationArgs { internal IntPtr opaque; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Discord_AuthorizationCodeChallenge { internal IntPtr opaque; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Discord_AuthorizationCodeVerifier { internal IntPtr opaque; }
+
     // === Native enums (values match cdiscord.h) ===
 
     internal enum Discord_Client_Status : int
@@ -110,6 +119,12 @@ namespace DiscordCore.Native
         RPCError = 9,
     }
 
+    internal enum Discord_AuthorizationTokenType : int
+    {
+        User = 0,
+        Bearer = 1,
+    }
+
     // === Unmanaged callback delegate types ===
     // IMPORTANT: All instances used as native callbacks MUST be stored in fields.
     // If they are garbage-collected while native code holds the function pointer, the process crashes.
@@ -144,6 +159,32 @@ namespace DiscordCore.Native
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     internal delegate void Discord_FreeFn(IntPtr ptr);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal unsafe delegate void Discord_Client_AuthorizationCallback(
+        IntPtr result,
+        Discord_String code,
+        Discord_String redirectUri,
+        IntPtr userData);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal unsafe delegate void Discord_Client_TokenExchangeCallback(
+        IntPtr result,
+        Discord_String accessToken,
+        Discord_String refreshToken,
+        Discord_AuthorizationTokenType tokenType,
+        int expiresIn,
+        Discord_String scopes,
+        IntPtr userData);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void Discord_Client_UpdateTokenCallback(IntPtr result, IntPtr userData);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void Discord_Client_RevokeTokenCallback(IntPtr result, IntPtr userData);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    internal delegate void Discord_Client_TokenExpirationCallback(IntPtr userData);
 
     // === P/Invoke declarations ===
 
@@ -357,5 +398,108 @@ namespace DiscordCore.Native
 
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void Discord_ClientResult_Error(ref Discord_ClientResult self, Discord_String* returnValue);
+
+        // --- OAuth2 / auth ---
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_Authorize(
+            ref Discord_Client self,
+            ref Discord_AuthorizationArgs args,
+            Discord_Client_AuthorizationCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_CreateAuthorizationCodeVerifier(
+            ref Discord_Client self,
+            out Discord_AuthorizationCodeVerifier returnValue);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_GetToken(
+            ref Discord_Client self,
+            ulong applicationId,
+            Discord_String code,
+            Discord_String codeVerifier,
+            Discord_String redirectUri,
+            Discord_Client_TokenExchangeCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_UpdateToken(
+            ref Discord_Client self,
+            Discord_AuthorizationTokenType tokenType,
+            Discord_String token,
+            Discord_Client_UpdateTokenCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_RefreshToken(
+            ref Discord_Client self,
+            ulong applicationId,
+            Discord_String refreshToken,
+            Discord_Client_TokenExchangeCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_RevokeToken(
+            ref Discord_Client self,
+            ulong applicationId,
+            Discord_String token,
+            Discord_Client_RevokeTokenCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool Discord_Client_IsAuthenticated(ref Discord_Client self);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_Client_SetTokenExpirationCallback(
+            ref Discord_Client self,
+            Discord_Client_TokenExpirationCallback callback,
+            Discord_FreeFn callbackUserDataFree,
+            IntPtr callbackUserData);
+
+        // --- Discord_AuthorizationArgs builders ---
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationArgs_Init(out Discord_AuthorizationArgs self);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationArgs_Drop(ref Discord_AuthorizationArgs self);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationArgs_SetClientId(ref Discord_AuthorizationArgs self, ulong value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationArgs_SetScopes(ref Discord_AuthorizationArgs self, Discord_String value);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationArgs_SetCodeChallenge(
+            ref Discord_AuthorizationArgs self,
+            ref Discord_AuthorizationCodeChallenge value);
+
+        // --- Discord_AuthorizationCodeVerifier accessors ---
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationCodeVerifier_Drop(ref Discord_AuthorizationCodeVerifier self);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationCodeVerifier_Challenge(
+            ref Discord_AuthorizationCodeVerifier self,
+            out Discord_AuthorizationCodeChallenge returnValue);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationCodeVerifier_Verifier(
+            ref Discord_AuthorizationCodeVerifier self,
+            Discord_String* returnValue);
+
+        // --- Discord_AuthorizationCodeChallenge ---
+
+        [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void Discord_AuthorizationCodeChallenge_Drop(ref Discord_AuthorizationCodeChallenge self);
     }
 }

@@ -2,11 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
 
 namespace DiscordCore
 {
@@ -14,6 +10,22 @@ namespace DiscordCore
     {
         public bool Active;
         public int Priority;
+    }
+
+    [Serializable]
+    public class DiscordTokenData
+    {
+        public string AccessToken { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public long TokenExpiry { get; set; } = 0;
+
+        [JsonIgnore]
+        public bool HasValidToken =>
+            !string.IsNullOrEmpty(AccessToken) &&
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds() < TokenExpiry - 60;
+
+        [JsonIgnore]
+        public bool HasRefreshToken => !string.IsNullOrEmpty(RefreshToken);
     }
 
     [Serializable]
@@ -63,6 +75,37 @@ namespace DiscordCore
             }
         }
 
+        public Dictionary<string, DiscordTokenData> AuthTokens { get; set; }
+
+        // Returns the stored token data for the given app ID, or null if none exists.
+        public DiscordTokenData GetTokens(long appId)
+        {
+            DiscordTokenData data;
+            AuthTokens.TryGetValue(appId.ToString(), out data);
+            return data;
+        }
+
+        public void SaveAuthTokens(long appId, string accessToken, string refreshToken, long expiry)
+        {
+            string key = appId.ToString();
+            DiscordTokenData data;
+            if (!AuthTokens.TryGetValue(key, out data))
+            {
+                data = new DiscordTokenData();
+                AuthTokens[key] = data;
+            }
+            data.AccessToken = accessToken;
+            data.RefreshToken = refreshToken;
+            data.TokenExpiry = expiry;
+            Save();
+        }
+
+        public void ClearAuthTokens(long appId)
+        {
+            AuthTokens.Remove(appId.ToString());
+            Save();
+        }
+
         public Dictionary<string, ModState> ModStates { get; set; }
 
         Config()
@@ -72,6 +115,7 @@ namespace DiscordCore
             _allowSpectate = true;
             _allowInvites = true;
 
+            AuthTokens = new Dictionary<string, DiscordTokenData>();
             ModStates = new Dictionary<string, ModState>();
         }
 

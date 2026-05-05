@@ -29,9 +29,10 @@ namespace DiscordCore
         // True once SetApplicationId has been called with a valid app ID.
         internal static bool IsConnected => _connected;
 
-        private static Discord_Client _client;         // opaque struct — must be a field, not a local
-        private static bool _clientInitialized;
+        internal static Discord_Client _client;         // opaque struct — must be a field, not a local
+        internal static bool _clientInitialized;
         private static bool _connected;               // true after first Connect(); false after Disable()
+        private static bool _authenticated;           // set by DiscordAuth; used so IsAuthenticated is accurate immediately after revoke
         private static Discord_Client_Status _currentStatus = Discord_Client_Status.Disconnected;
 
         // Log level mapping (C# 7.3 — no switch expressions)
@@ -49,20 +50,32 @@ namespace DiscordCore
         private static Discord_Client_LogCallback _logCallbackDelegate;
         private static Discord_Client_ActivityJoinCallback _activityJoinDelegate;
         private static Discord_Client_ActivityInviteCallback _activityInviteDelegate;
-        private static Discord_FreeFn _nullFreeFn = (_) => { };
+        internal static Discord_FreeFn _nullFreeFn = (_) => { };
+
+        public static bool IsAuthenticated =>
+            _clientInitialized && _authenticated && SDK.Discord_Client_IsAuthenticated(ref _client);
+
+        internal static void SetAuthenticated(bool value) => _authenticated = value;
+
+        public static void Authorize(Action<bool, string> callback) =>
+            DiscordAuth.Authorize(callback);
+
+        public static void RevokeAuth(Action callback) =>
+            DiscordAuth.Revoke(callback);
 
         internal static void Disable(bool hasError = false)
         {
             CurrentAppID = -1;
             if (_clientInitialized)
             {
-                // Drop releases native resources. No Disconnect needed — we never called Connect()
-                // in RPC mode (rich presence without OAuth2 authentication).
+                if (SDK.Discord_Client_IsAuthenticated(ref _client))
+                    SDK.Discord_Client_Disconnect(ref _client);
                 SDK.Discord_Client_Drop(ref _client);
                 _client = default;
                 _clientInitialized = false;
             }
             _connected = false;
+            _authenticated = false;
             _currentStatus = Discord_Client_Status.Disconnected;
             if (Enabled)
             {
@@ -122,6 +135,9 @@ namespace DiscordCore
             _activityInviteDelegate = OnNativeActivityInvite;
             SDK.Discord_Client_SetActivityInviteCreatedCallback(ref _client, _activityInviteDelegate, _nullFreeFn, IntPtr.Zero);
 
+            // Token expiry → auto-refresh via DiscordAuth.
+            DiscordAuth.RegisterExpiryCallback();
+
             // SetApplicationId, RegisterLaunchSteamApplication, and Connect are NOT called here.
             // They happen in ChangeAppID() once DiscordManager determines the correct app ID.
         }
@@ -154,6 +170,7 @@ namespace DiscordCore
             SDK.Discord_Client_RegisterLaunchSteamApplication(ref _client, resolvedId, 620980u);
             CurrentAppID = (long)resolvedId;
             _connected = true;
+            DiscordAuth.TryConnect();
         }
 
         public static void UpdateRichPresence(Activity activity, Action<bool, string> callback)

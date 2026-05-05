@@ -1,5 +1,10 @@
 ﻿<settings-container xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:schemaLocation='https://monkeymanboy.github.io/BSML-Docs/ https://monkeymanboy.github.io/BSML-Docs/BSMLSchema.xsd'>
 
+  <horizontal spacing='2' pad-top='1'>
+    <button id='discord-connect-btn' text='Connect Discord account' on-click='connect-discord' />
+    <button id='discord-disconnect-btn' text='Disconnect Discord' on-click='disconnect-discord' />
+  </horizontal>
+
   <checkbox text='Enable DiscordCore' value='enable-plugin' apply-on-change='true' />
   <checkbox text='Allow join requests' value='allow-join' apply-on-change='true' />
   <checkbox text='Allow spectator requests' value='allow-spectator' apply-on-change='true' />
